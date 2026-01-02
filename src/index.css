@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Lora:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Mono:ital,wght@0,100..700;1,100..700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 177 61% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 177 61% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 177 61% 10%;
+    --primary: 174 84% 31%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 171 67% 97%;
+    --secondary-foreground: 177 61% 19%;
+    --muted: 171 67% 94%;
+    --muted-foreground: 177 61% 30%;
+    --accent: 172 66% 50%;
+    --accent-foreground: 177 61% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 174 84% 90%;
+    --input: 174 84% 90%;
+    --ring: 174 84% 31%;
+
+    --chart-1: 174 84% 31%;
+    --chart-2: 172 66% 50%;
+    --chart-3: 177 61% 19%;
+    --chart-4: 171 67% 94%;
+    --chart-5: 0 0% 100%;
+
+    --sidebar: 171 67% 97%;
+    --sidebar-foreground: 177 61% 19%;
+    --sidebar-primary: 174 84% 31%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 172 66% 50%;
+    --sidebar-accent-foreground: 177 61% 10%;
+    --sidebar-border: 174 84% 90%;
+    --sidebar-ring: 174 84% 31%;
+
+    /* Fonts */
+    --font-sans: DM Sans, sans-serif;
+    --font-serif: Lora, serif;
+    --font-mono: IBM Plex Mono, monospace;
+
+    /* Shadows */
+    --shadow-2xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
+    --shadow-xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
+    --shadow-sm: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 1px 2px -2px hsl(0 0% 0% / 0.10);
+    --shadow: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 1px 2px -2px hsl(0 0% 0% / 0.10);
+    --shadow-md: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 2px 4px -2px hsl(0 0% 0% / 0.10);
+    --shadow-lg: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 4px 6px -2px hsl(0 0% 0% / 0.10);
+    --shadow-xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 8px 10px -2px hsl(0 0% 0% / 0.10);
+    --shadow-2xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.25);
+
+    /* Misc */
+    --tracking-normal: 0em;
+    --spacing: 0.25rem;
+    --shadow-elegant: 0 10px 30px -10px hsl(var(--primary) / 0.15);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --background: 177 85% 5%;
+    --foreground: 171 67% 97%;
+    --card: 177 85% 8%;
+    --card-foreground: 171 67% 97%;
+    --popover: 177 85% 8%;
+    --popover-foreground: 171 67% 97%;
+    --primary: 172 66% 50%;
+    --primary-foreground: 177 85% 5%;
+    --secondary: 177 61% 19%;
+    --secondary-foreground: 171 67% 97%;
+    --muted: 177 61% 15%;
+    --muted-foreground: 171 67% 70%;
+    --accent: 174 84% 31%;
+    --accent-foreground: 171 67% 97%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 171 67% 97%;
+    --border: 177 61% 20%;
+    --input: 177 61% 20%;
+    --ring: 172 66% 50%;
+
+    --chart-1: 172 66% 50%;
+    --chart-2: 174 84% 31%;
+    --chart-3: 177 61% 40%;
+    --chart-4: 171 67% 30%;
+    --chart-5: 177 85% 10%;
+
+    --sidebar: 177 85% 8%;
+    --sidebar-foreground: 171 67% 97%;
+    --sidebar-primary: 172 66% 50%;
+    --sidebar-primary-foreground: 177 85% 5%;
+    --sidebar-accent: 177 61% 19%;
+    --sidebar-accent-foreground: 171 67% 97%;
+    --sidebar-border: 177 61% 20%;
+    --sidebar-ring: 172 66% 50%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    letter-spacing: var(--tracking-normal);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

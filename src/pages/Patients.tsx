@@ -378,34 +378,36 @@ export function Patients() {
                   <TableHead>Acciones</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                   {filteredPatients.map(patient => (
-                  <TableRow key={patient.id}>
-                    <TableCell className="font-medium">
-                      {patient.anonymousId}
-                    </TableCell>
-                    <TableCell>{patient.consultationDate}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{patient.category}</Badge>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {patient.reason}
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {patient.diagnosis || '-'}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => patient.id && handleDelete(patient.id)}
-                      >
-                        Eliminar
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
+             <TableBody>
+  {filteredPatients.map(patient => (
+    <TableRow key={patient.id} className="group">
+      <TableCell className="font-medium">
+        {patient.anonymousId}
+      </TableCell>
+      <TableCell>{patient.consultationDate}</TableCell>
+      <TableCell>
+        <Badge variant="outline">{patient.category}</Badge>
+      </TableCell>
+      <TableCell className="max-w-xs truncate">
+        {patient.reason}
+      </TableCell>
+      <TableCell className="max-w-xs truncate">
+        {patient.diagnosis || '-'}
+      </TableCell>
+      <TableCell>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10"
+          onClick={() => patient.id && handleDelete(patient.id)}
+        >
+          <Trash2 className="w-4 h-5" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  ))}
+</TableBody>
+
             </Table>
           )}
         </CardContent>

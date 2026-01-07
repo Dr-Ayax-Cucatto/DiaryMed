@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Search, Filter, Calendar, Clock, BookOpen } from 'lucide-react';
+import { Plus, Search, Filter, Calendar, Clock, BookOpen, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { db } from '@/firebase';
 import {
@@ -394,15 +394,16 @@ export function Patients() {
                     <TableCell className="max-w-xs truncate">
                       {patient.diagnosis || '-'}
                     </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => patient.id && handleDelete(patient.id)}
-                      >
-                        Eliminar
-                      </Button>
-                    </TableCell>
+                <TableCell>
+  <Button
+    variant="ghost"
+    size="icon"
+    onClick={() => patient.id && handleDelete(patient.id)}
+    className="hover:bg-red-50 hover:text-red-600 transition-colors"
+  >
+    <Trash2 className="w-4 h-4" />
+  </Button>
+</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

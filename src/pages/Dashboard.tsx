@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { blink } from '../lib/blink';
 import type { BlinkUser } from '@blinkdotnew/sdk';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Users, Clock, Brain, Target, TrendingUp, Calendar } from 'lucide-react';
+import { Users, Clock, Brain, Target, TrendingUp, Calendar, RefreshCw } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Button } from '../components/ui/button';
 
 interface DashboardProps {
   user: BlinkUser;
@@ -24,13 +25,23 @@ export function Dashboard({ user }: DashboardProps) {
     activeGoals: 0,
   });
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchStats();
+    
+    // Auto-refresh cada 30 segundos
+    const interval = setInterval(() => {
+      fetchStats();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const fetchStats = async () => {
     try {
+      setIsRefreshing(true);
+      
       // Fetch total patients
       const patients = await blink.db.patients.list({
         where: { userId: user.id }
@@ -77,7 +88,13 @@ export function Dashboard({ user }: DashboardProps) {
       setWeeklyData(chartData);
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
+    } finally {
+      setIsRefreshing(false);
     }
+  };
+
+  const handleManualRefresh = () => {
+    fetchStats();
   };
 
   const statCards = [
@@ -89,9 +106,20 @@ export function Dashboard({ user }: DashboardProps) {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-fade-in">
-      <header>
-        <h1 className="text-3xl font-bold text-foreground font-serif">Bienvenido, Dr. {user.displayName}</h1>
-        <p className="text-muted-foreground mt-2">Aquí tienes un resumen de tu actividad profesional reciente.</p>
+      <header className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground font-serif">Bienvenido, Dr. {user.displayName}</h1>
+          <p className="text-muted-foreground mt-2">Aquí tienes un resumen de tu actividad profesional reciente.</p>
+        </div>
+        <Button 
+          variant="outline" 
+          size="icon"
+          onClick={handleManualRefresh}
+          disabled={isRefreshing}
+          className="rounded-full"
+        >
+          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </Button>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

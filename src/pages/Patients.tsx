@@ -17,8 +17,9 @@ import {
   orderBy,
   serverTimestamp,
   Timestamp,
+  deleteDoc,
+  doc,
 } from 'firebase/firestore';
-
 interface PatientData {
   id?: string;
   anonymousId: string;
@@ -156,7 +157,20 @@ export function Patients() {
     p.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.reason?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  // Función para eliminar un paciente
+  const handleDelete = async (patientId: string) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar este registro? Esta acción no se puede deshacer.')) {
+      return;
+    }
 
+    try {
+      await deleteDoc(doc(db, 'patients', patientId));
+      toast.success('✅ Registro eliminado correctamente');
+    } catch (error: any) {
+      console.error('Error al eliminar:', error);
+      toast.error('❌ Error al eliminar el registro');
+    }
+  };
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-fade-in">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -361,10 +375,11 @@ export function Patients() {
                   <TableHead>Categoría</TableHead>
                   <TableHead>Motivo</TableHead>
                   <TableHead>Diagnóstico</TableHead>
+                  <TableHead>Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPatients.map(patient => (
+                   {filteredPatients.map(patient => (
                   <TableRow key={patient.id}>
                     <TableCell className="font-medium">
                       {patient.anonymousId}
@@ -378,6 +393,15 @@ export function Patients() {
                     </TableCell>
                     <TableCell className="max-w-xs truncate">
                       {patient.diagnosis || '-'}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => patient.id && handleDelete(patient.id)}
+                      >
+                        Eliminar
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

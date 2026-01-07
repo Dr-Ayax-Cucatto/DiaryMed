@@ -214,4 +214,4 @@ export function Patients() {
                     <option>Emergencia</option>
                     <option>Cirugía</option>
                     <option>Seguimiento</option>
-                  </select
+                  </select>

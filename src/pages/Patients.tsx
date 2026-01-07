@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Search, Filter, Calendar, Clock, BookOpen } from 'lucide-react';
+import { Plus, Search, Filter, Calendar, Clock, BookOpen, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { db } from '@/firebase';
 import {
@@ -17,6 +17,8 @@ import {
   orderBy,
   serverTimestamp,
   Timestamp,
+  deleteDoc,
+  doc,
 } from 'firebase/firestore';
 
 interface PatientData {
@@ -91,6 +93,19 @@ export function Patients() {
     e.preventDefault();
     
     // Validaciones básicas
+    const handleDelete = async (patientId: string, anonymousId: string) => {
+  if (!window.confirm(`¿Estás seguro de eliminar el paciente ${anonymousId}?`)) {
+    return;
+  }
+
+  try {
+    await deleteDoc(doc(db, 'patients', patientId));
+    toast.success('✅ Paciente eliminado correctamente');
+  } catch (error: any) {
+    console.error('Error al eliminar:', error);
+    toast.error('❌ Error al eliminar: ' + error.message);
+  }
+};
     if (!formData.anonymousId.trim()) {
       toast.error('El ID Anónimo es obligatorio');
       return;
@@ -355,31 +370,42 @@ export function Patients() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>Categoría</TableHead>
-                  <TableHead>Motivo</TableHead>
-                  <TableHead>Diagnóstico</TableHead>
-                </TableRow>
-              </TableHeader>
+  <TableRow>
+    <TableHead>ID</TableHead>
+    <TableHead>Fecha</TableHead>
+    <TableHead>Categoría</TableHead>
+    <TableHead>Motivo</TableHead>
+    <TableHead>Diagnóstico</TableHead>
+    <TableHead className="text-right">Acciones</TableHead>
+  </TableRow>
+</TableHeader>
               <TableBody>
                 {filteredPatients.map(patient => (
-                  <TableRow key={patient.id}>
-                    <TableCell className="font-medium">
-                      {patient.anonymousId}
-                    </TableCell>
-                    <TableCell>{patient.consultationDate}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{patient.category}</Badge>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {patient.reason}
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {patient.diagnosis || '-'}
-                    </TableCell>
-                  </TableRow>
+                 <TableRow key={patient.id}>
+  <TableCell className="font-medium">
+    {patient.anonymousId}
+  </TableCell>
+  <TableCell>{patient.consultationDate}</TableCell>
+  <TableCell>
+    <Badge variant="outline">{patient.category}</Badge>
+  </TableCell>
+  <TableCell className="max-w-xs truncate">
+    {patient.reason}
+  </TableCell>
+  <TableCell className="max-w-xs truncate">
+    {patient.diagnosis || '-'}
+  </TableCell>
+  <TableCell className="text-right">
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={() => handleDelete(patient.id!, patient.anonymousId)}
+      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+    >
+      <Trash2 className="w-4 h-4" />
+    </Button>
+  </TableCell>
+</TableRow>
                 ))}
               </TableBody>
             </Table>

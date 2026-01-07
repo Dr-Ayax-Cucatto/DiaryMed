@@ -191,23 +191,75 @@ export function Patients() {
 
             <form onSubmit={handleSubmit} className="space-y-6 pt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">ID Anónimo (Código) *</label>
-                  <Input
-                    required
-                    placeholder="Ej: PAC-001"
-                    value={formData.anonymousId}
-                    onChange={(e) => setFormData({ ...formData, anonymousId: e.target.value })}
-                  />
-                </div>
+  <div className="space-y-2">
+    <label className="text-sm font-medium">ID Anónimo (Código) *</label>
+    <Input
+      required
+      placeholder="Ej: PAC-001"
+      value={formData.anonymousId}
+      onChange={(e) => setFormData({ ...formData, anonymousId: e.target.value })}
+    />
+  </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Categoría</label>
-                  <select
-                    className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  >
+  <div className="space-y-2">
+    <label className="text-sm font-medium">Categoría</label>
+    <select
+      className="w-full h-10 px-3 rounded-md border border-input bg-background"
+      value={formData.category}
+      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+    >
+      <option>General</option>
+      <option>Pediátrico</option>
+      <option>Crónico</option>
+      <option>Emergencia</option>
+      <option>Cirugía</option>
+      <option>Seguimiento</option>
+    </select>
+  </div>
+
+  <div className="space-y-2">
+    <label className="text-sm font-medium flex items-center gap-2">
+      <Calendar className="w-4 h-4" />
+      Fecha de Consulta
+    </label>
+    <Input
+      type="date"
+      value={formData.consultationDate}
+      onChange={(e) => setFormData({ ...formData, consultationDate: e.target.value })}
+    />
+  </div>
+
+  <div className="space-y-2">
+    <label className="text-sm font-medium flex items-center gap-2">
+      <Clock className="w-4 h-4" />
+      Hora de Consulta
+    </label>
+    <Input
+      type="time"
+      value={formData.consultationTime}
+      onChange={(e) => setFormData({ ...formData, consultationTime: e.target.value })}
+    />
+  </div>
+
+  <div className="space-y-2">
+    <label className="text-sm font-medium">Duración (minutos)</label>
+    <Input
+      type="number"
+      min="1"
+      value={formData.durationMinutes}
+      onChange={(e) => setFormData({ ...formData, durationMinutes: Number(e.target.value) })}
+    />
+  </div>
+
+  <div className="space-y-2">
+    <label className="text-sm font-medium">Fecha de Seguimiento</label>
+    <Input
+      type="date"
+      value={formData.followUpDate}
+      onChange={(e) => setFormData({ ...formData, followUpDate: e.target.value })}
+    />
+  </div>
+</div>
                     <option>General</option>
                     <option>Pediátrico</option>
                     <option>Crónico</option>

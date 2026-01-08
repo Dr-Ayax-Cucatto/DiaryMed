@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { blink } from '../lib/blink';
 import type { BlinkUser } from '@blinkdotnew/sdk';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Users, Clock, Brain, Target, TrendingUp, Calendar, RefreshCw } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Button } from '../components/ui/button';
+import { db } from '../firebase';
+import { collection, onSnapshot, query } from 'firebase/firestore';
 
 interface DashboardProps {
   user: BlinkUser;

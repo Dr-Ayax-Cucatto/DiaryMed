@@ -126,17 +126,31 @@
     transform: translateY(0);
   }
 }
+/* ========================================
+   ELIMINAR WATERMARK DE BLINK
+   ======================================== */
 a.watermark,
-a[href*="blink.new"],
-.watermark,
-.blink-badge,
-[class*="watermark"] {
+a[href="https://blink.new?ref=blink-badge"],
+a[href*="blink.new"][class="watermark"] {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
   position: absolute !important;
   left: -99999px !important;
+  top: -99999px !important;
   width: 0 !important;
   height: 0 !important;
+  overflow: hidden !important;
+  z-index: -9999 !important;
+}
+
+/* Ocultar también los elementos internos del watermark */
+.watermark .made-with,
+.watermark .spacer,
+.watermark .blink,
+.watermark .blink-seo-text,
+.watermark .divider,
+.watermark .close-button {
+  display: none !important;
 }

@@ -11,40 +11,60 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-<!-- Script para remover/reemplazar el badge de Blink -->
-    <script type="module">
-      // Esperamos a que todo el DOM esté cargado y la app renderizada
-      document.addEventListener('DOMContentLoaded', () => {
-        // Intentamos encontrar el badge varias veces por si se inyecta tarde
-        const tryRemoveBadge = () => {
-          // Selectores comunes que suele usar este tipo de badges (ajustá según lo que veas al inspeccionar)
-          const badge = document.querySelector('a[href*="blink.new"]') ||
-                        document.querySelector('a[href="https://blink.new"]') ||
-                        document.querySelector('[class*="blink"]') ||
-                        document.querySelector('footer a, .footer a, div:contains("Blink")');
+<!-- Script robusto para eliminar o reemplazar el badge de Blink -->
+<script>
+  function removeBlinkBadge() {
+    // Selectores más amplios para encontrar el badge (ajustá si inspeccionás y ves algo diferente)
+    const selectors = [
+      'a[href*="blink.new"]',
+      'a[href*="blink"]',
+      '[class*="blink"]',
+      '[id*="blink"]',
+      'div:contains("Blink")',
+      'span:contains("Blink")',
+      'footer a',
+      '.fixed a',  // muchos badges son fixed bottom-right
+      '[aria-label*="blink"]'
+    ];
 
-          if (badge) {
-            // Opción 1: Ocultarlo completamente
-            //badge.style.display = 'none';
+    let badge = null;
+    for (const sel of selectors) {
+      badge = document.querySelector(sel);
+      if (badge) break;
+    }
 
-            // Opción 2: Reemplazarlo por tu texto (descomenta si preferís esta)
-            badge.innerHTML = 'Made by Ayax ❤️';
-            badge.href = '#'; // o tu link personal
-            badge.target = ''; // para que no abra en nueva pestaña
+    if (badge && badge.textContent.toLowerCase().includes('blink')) {
+      // Opción 1: Ocultar completamente (más simple y efectivo)
+      badge.style.display = 'none !important';
+      badge.style.visibility = 'hidden !important';
+      badge.remove();  // incluso intenta removerlo del DOM
 
-            console.log('Badge de Blink modificado');
-          } else {
-            // Si no lo encuentra todavía, reintenta en 500ms (máx 10 veces)
-            if (tryRemoveBadge.attempts < 10) {
-              tryRemoveBadge.attempts++;
-              setTimeout(tryRemoveBadge, 500);
-            }
-          }
-        };
+      console.log('Badge de Blink ocultado/removido');
 
-        tryRemoveBadge.attempts = 0;
-        tryRemoveBadge();
-      });
-    </script>
+      // Opción 2: Reemplazar por tu texto (descomenta si preferís)
+      // badge.innerHTML = 'Made by Ayax';
+      // badge.href = 'https://tu-portfolio.com'; // o lo que quieras
+      // badge.style.color = '#888';
+    }
+  }
+
+  // Ejecutar inmediatamente y luego observar cambios en el DOM (por si inyecta después)
+  removeBlinkBadge();
+
+  // MutationObserver para detectar inserciones tardías
+  const observer = new MutationObserver(() => {
+    removeBlinkBadge();
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // También reintentar cada segundo por 30 segundos (por si es muy tardío)
+  let attempts = 0;
+  const interval = setInterval(() => {
+    removeBlinkBadge();
+    attempts++;
+    if (attempts >= 30) clearInterval(interval);
+  }, 1000);
+</script>
   </body>
 </html> 

@@ -5,8 +5,8 @@ export const blink = createClient({
   auth: {
     mode: 'managed',
   },
-  branding: false, // Intenta agregar esto
+  //branding: false, // Intenta agregar esto
   // O también prueba con:
-  // showBranding: false,
-  // watermark: false,
+ showBranding: false,
+ watermark: false,
 });

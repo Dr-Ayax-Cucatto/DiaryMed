@@ -126,15 +126,3 @@
     transform: translateY(0);
   }
 }
-/* Ocultar el watermark de Blink */
-a[href*="blink.new"],
-a[href*="blink"][target="_blank"]:has-text("made with"),
-[class*="blink-watermark"],
-[id*="blink-watermark"] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  height: 0 !important;
-  width: 0 !important;
-  pointer-events: none !important;
-}

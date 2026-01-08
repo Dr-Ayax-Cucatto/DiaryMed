@@ -15,11 +15,11 @@
     "lint": "bun run lint:types && bun run lint:js && bun run lint:css && bun run check:css-vars && bun run check:css-classes"
   },
   "devDependencies": {
-    "firebase": "^10.13.1",
     "typescript": "~5.9.3",
     "vite": "^7.2.4"
   },
   "dependencies": {
+    "firebase": "^10.13.1",
     "@blinkdotnew/sdk": "2.3.4",
     "@dnd-kit/core": "^6.3.1",
     "@hookform/resolvers": "^5.2.2",

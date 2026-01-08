@@ -11,5 +11,40 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+<!-- Script para remover/reemplazar el badge de Blink -->
+    <script type="module">
+      // Esperamos a que todo el DOM esté cargado y la app renderizada
+      document.addEventListener('DOMContentLoaded', () => {
+        // Intentamos encontrar el badge varias veces por si se inyecta tarde
+        const tryRemoveBadge = () => {
+          // Selectores comunes que suele usar este tipo de badges (ajustá según lo que veas al inspeccionar)
+          const badge = document.querySelector('a[href*="blink.new"]') ||
+                        document.querySelector('a[href="https://blink.new"]') ||
+                        document.querySelector('[class*="blink"]') ||
+                        document.querySelector('footer a, .footer a, div:contains("Blink")');
+
+          if (badge) {
+            // Opción 1: Ocultarlo completamente
+            //badge.style.display = 'none';
+
+            // Opción 2: Reemplazarlo por tu texto (descomenta si preferís esta)
+            badge.innerHTML = 'Made by Ayax ❤️';
+            badge.href = '#'; // o tu link personal
+            badge.target = ''; // para que no abra en nueva pestaña
+
+            console.log('Badge de Blink modificado');
+          } else {
+            // Si no lo encuentra todavía, reintenta en 500ms (máx 10 veces)
+            if (tryRemoveBadge.attempts < 10) {
+              tryRemoveBadge.attempts++;
+              setTimeout(tryRemoveBadge, 500);
+            }
+          }
+        };
+
+        tryRemoveBadge.attempts = 0;
+        tryRemoveBadge();
+      });
+    </script>
   </body>
 </html> 

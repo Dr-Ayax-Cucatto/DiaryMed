@@ -5,65 +5,72 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MediTrack</title>
-    <!-- CRITICAL: DO NOT REMOVE/MODIFY THIS COMMENT OR THE SCRIPT BELOW -->
-     </head>
+    <style>
+      /* Forzar eliminación del watermark de Blink */
+      a.watermark,
+      a[href*="blink.new"],
+      a[href*="blink"][target="_blank"],
+      [class*="watermark"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        left: -99999px !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        z-index: -99999 !important;
+      }
+    </style>
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-<!-- Script robusto para eliminar o reemplazar el badge de Blink -->
-<script>
-  function removeBlinkBadge() {
-    // Selectores más amplios para encontrar el badge (ajustá si inspeccionás y ves algo diferente)
-    const selectors = [
-      'a[href*="blink.new"]',
-      'a[href*="blink"]',
-      '[class*="blink"]',
-      '[id*="blink"]',
-      'div:contains("Blink")',
-      'span:contains("Blink")',
-      'footer a',
-      '.fixed a',  // muchos badges son fixed bottom-right
-      '[aria-label*="blink"]'
-    ];
-
-    let badge = null;
-    for (const sel of selectors) {
-      badge = document.querySelector(sel);
-      if (badge) break;
-    }
-
-    if (badge && badge.textContent.toLowerCase().includes('blink')) {
-      // Opción 1: Ocultar completamente (más simple y efectivo)
-      badge.style.display = 'none !important';
-      badge.style.visibility = 'hidden !important';
-      badge.remove();  // incluso intenta removerlo del DOM
-
-      console.log('Badge de Blink ocultado/removido');
-
-      // Opción 2: Reemplazar por tu texto (descomenta si preferís)
-      // badge.innerHTML = 'Made by Ayax';
-      // badge.href = 'https://tu-portfolio.com'; // o lo que quieras
-      // badge.style.color = '#888';
-    }
-  }
-
-  // Ejecutar inmediatamente y luego observar cambios en el DOM (por si inyecta después)
-  removeBlinkBadge();
-
-  // MutationObserver para detectar inserciones tardías
-  const observer = new MutationObserver(() => {
-    removeBlinkBadge();
-  });
-
-  observer.observe(document.body, { childList: true, subtree: true });
-
-  // También reintentar cada segundo por 30 segundos (por si es muy tardío)
-  let attempts = 0;
-  const interval = setInterval(() => {
-    removeBlinkBadge();
-    attempts++;
-    if (attempts >= 30) clearInterval(interval);
-  }, 1000);
-</script>
+    
+    <script>
+      // Script ultra-agresivo para eliminar watermark
+      (function() {
+        function nukeWatermark() {
+          // Método 1: Por clase
+          document.querySelectorAll('.watermark, a.watermark').forEach(el => el.remove());
+          
+          // Método 2: Por href
+          document.querySelectorAll('a[href*="blink.new"]').forEach(el => el.remove());
+          
+          // Método 3: Por contenido de texto
+          document.querySelectorAll('a').forEach(link => {
+            const text = link.textContent?.toLowerCase() || '';
+            if (text.includes('made with') && text.includes('blink')) {
+              link.remove();
+            }
+          });
+        }
+        
+        // Ejecutar inmediatamente
+        nukeWatermark();
+        
+        // Ejecutar cuando el DOM esté listo
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', nukeWatermark);
+        }
+        
+        // Ejecutar cada 50ms durante 20 segundos
+        let count = 0;
+        const interval = setInterval(() => {
+          nukeWatermark();
+          count++;
+          if (count > 400) clearInterval(interval); // 50ms * 400 = 20 segundos
+        }, 50);
+        
+        // Observer permanente
+        const observer = new MutationObserver(nukeWatermark);
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          attributes: true
+        });
+      })();
+    </script>
   </body>
-</html> 
+</html>

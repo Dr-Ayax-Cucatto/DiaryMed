@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
+import { blink } from '../lib/blink';
 import type { BlinkUser } from '@blinkdotnew/sdk';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Users, Clock, Brain, Target, TrendingUp, Calendar, RefreshCw } from 'lucide-react';
+import { Users, Clock, Brain, Target, TrendingUp, Calendar } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Button } from '../components/ui/button';
 import { db } from '../firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 interface DashboardProps {
   user: BlinkUser;
@@ -18,6 +18,22 @@ interface Stats {
   activeGoals: number;
 }
 
+interface PatientData {
+  id?: string;
+  anonymousId: string;
+  consultationDate: string;
+  consultationTime: string;
+  reason: string;
+  diagnosis: string;
+  treatment: string;
+  observations: string;
+  durationMinutes: number;
+  lessonsLearned: string;
+  category: string;
+  followUpDate: string;
+  createdAt?: any;
+}
+
 export function Dashboard({ user }: DashboardProps) {
   const [stats, setStats] = useState<Stats>({
     totalPatients: 0,
@@ -26,76 +42,107 @@ export function Dashboard({ user }: DashboardProps) {
     activeGoals: 0,
   });
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Escuchar cambios de pacientes en Firebase en tiempo real
   useEffect(() => {
-    fetchStats();
+    console.log('🔥 Iniciando listener de Firebase...');
     
-    // Auto-refresh cada 30 segundos
-    const interval = setInterval(() => {
-      fetchStats();
-    }, 30000);
+    const q = query(collection(db, 'patients'), orderBy('createdAt', 'desc'));
+    
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        console.log('📊 Datos recibidos de Firebase:', snapshot.docs.length, 'pacientes');
+        
+        const patients = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as PatientData[];
+        
+        calculateStats(patients);
+      },
+      (error) => {
+        console.error('❌ Error al cargar pacientes:', error);
+      }
+    );
 
-    return () => clearInterval(interval);
+    return () => {
+      console.log('🛑 Limpiando listener de Firebase');
+      unsubscribe();
+    };
   }, []);
 
-  const fetchStats = async () => {
-    try {
-      setIsRefreshing(true);
-      
-      // Fetch total patients
-      const patients = await blink.db.patients.list({
-        where: { userId: user.id }
-      });
-      
-      // Calculate stats
-      const totalPatients = patients.length;
-      const totalMinutes = patients.reduce((acc: number, p: any) => acc + (p.durationMinutes || 0), 0);
-      
-      const categories: Record<string, number> = {};
-      patients.forEach((p: any) => {
-        if (p.category) categories[p.category] = (categories[p.category] || 0) + 1;
-      });
-      const mostCommonCategory = Object.entries(categories).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+  // Cargar metas activas de Blink
+  useEffect(() => {
+    fetchGoals();
+  }, [user.id]);
 
-      // Fetch active goals - fetch all user's goals and filter in-memory
+  const fetchGoals = async () => {
+    try {
       const allGoals = await blink.db.professionalGoals.list({
         where: { userId: user.id }
       });
-      const goals = allGoals.filter((g: any) => g.status === 'pending');
-
-      setStats({
-        totalPatients,
-        totalMinutes,
-        mostCommonCategory,
-        activeGoals: goals.length,
-      });
-
-      // Prepare weekly data for chart
-      const last7Days = [...Array(7)].map((_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (6 - i));
-        return d.toISOString().split('T')[0];
-      });
-
-      const chartData = last7Days.map(date => {
-        const count = patients.filter((p: any) => p.consultationDate === date).length;
-        return {
-          date: new Date(date).toLocaleDateString('es-ES', { weekday: 'short' }),
-          pacientes: count,
-        };
-      });
-
-      setWeeklyData(chartData);
+      const activeGoals = allGoals.filter((g: any) => g.status === 'pending');
+      
+      setStats(prev => ({
+        ...prev,
+        activeGoals: activeGoals.length,
+      }));
     } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
-    } finally {
-      setIsRefreshing(false);
+      console.error('Error fetching goals:', error);
     }
   };
 
-  const handleManualRefresh = () => {
-    fetchStats();
+  const calculateStats = (patients: PatientData[]) => {
+    console.log('🧮 Calculando estadísticas con', patients.length, 'pacientes');
+    
+    // Calculate stats
+    const totalPatients = patients.length;
+    const totalMinutes = patients.reduce((acc, p) => {
+      const minutes = Number(p.durationMinutes) || 0;
+      return acc + minutes;
+    }, 0);
+    
+    console.log('⏱️ Total minutos:', totalMinutes);
+    
+    const categories: Record<string, number> = {};
+    patients.forEach((p) => {
+      if (p.category) {
+        categories[p.category] = (categories[p.category] || 0) + 1;
+      }
+    });
+    
+    const mostCommonCategory = Object.entries(categories).length > 0
+      ? Object.entries(categories).sort((a, b) => b[1] - a[1])[0][0]
+      : 'N/A';
+
+    console.log('📈 Categoría más común:', mostCommonCategory);
+
+    setStats(prev => ({
+      ...prev,
+      totalPatients,
+      totalMinutes,
+      mostCommonCategory,
+    }));
+
+    // Prepare weekly data for chart
+    const last7Days = [...Array(7)].map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d.toISOString().split('T')[0];
+    });
+
+    const chartData = last7Days.map(date => {
+      const count = patients.filter((p) => p.consultationDate === date).length;
+      const dayName = new Date(date).toLocaleDateString('es-ES', { weekday: 'short' });
+      return {
+        date: dayName.charAt(0).toUpperCase() + dayName.slice(1),
+        pacientes: count,
+      };
+    });
+
+    console.log('📊 Datos del gráfico:', chartData);
+    setWeeklyData(chartData);
   };
 
   const statCards = [
@@ -107,20 +154,9 @@ export function Dashboard({ user }: DashboardProps) {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-fade-in">
-      <header className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground font-serif">Bienvenido, Dr. {user.displayName}</h1>
-          <p className="text-muted-foreground mt-2">Aquí tienes un resumen de tu actividad profesional reciente.</p>
-        </div>
-        <Button 
-          variant="outline" 
-          size="icon"
-          onClick={handleManualRefresh}
-          disabled={isRefreshing}
-          className="rounded-full"
-        >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-        </Button>
+      <header>
+        <h1 className="text-3xl font-bold text-foreground font-serif">Bienvenido, Dr. {user.displayName}</h1>
+        <p className="text-muted-foreground mt-2">Aquí tienes un resumen de tu actividad profesional reciente.</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -150,24 +186,30 @@ export function Dashboard({ user }: DashboardProps) {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={weeklyData}>
-                  <defs>
-                    <linearGradient id="colorPacientes" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: '12px' }}
-                    itemStyle={{ color: 'hsl(var(--primary))' }}
-                  />
-                  <Area type="monotone" dataKey="pacientes" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorPacientes)" strokeWidth={3} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {weeklyData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={weeklyData}>
+                    <defs>
+                      <linearGradient id="colorPacientes" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: '12px' }}
+                      itemStyle={{ color: 'hsl(var(--primary))' }}
+                    />
+                    <Area type="monotone" dataKey="pacientes" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorPacientes)" strokeWidth={3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  Cargando datos...
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

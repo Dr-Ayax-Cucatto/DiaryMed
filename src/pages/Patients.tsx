@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { BlinkUser } from '@blinkdotnew/sdk';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
@@ -6,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Search, Filter, Calendar, Clock, BookOpen, Trash2 } from 'lucide-react';
+import { Plus, Search, Calendar, Clock, BookOpen, Trash2, Edit } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { db } from '@/firebase';
 import {
@@ -15,15 +16,16 @@ import {
   onSnapshot,
   query,
   orderBy,
+  where,
   serverTimestamp,
   deleteDoc,
   doc,
-  where,
+  updateDoc,
 } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
 interface PatientData {
   id?: string;
+  userId: string; // 👈 AGREGADO: Para filtrar por usuario
   anonymousId: string;
   consultationDate: string;
   consultationTime: string;
@@ -36,18 +38,21 @@ interface PatientData {
   category: string;
   followUpDate: string;
   createdAt?: any;
-  ownerId?: string;
 }
 
-export function Patients() {
+interface PatientsProps {
+  user: BlinkUser; // 👈 AGREGADO: Recibe el usuario actual
+}
+
+export function Patients({ user }: PatientsProps) {
   const [patients, setPatients] = useState<PatientData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [uid, setUid] = useState<string | null>(null);
+  const [editingPatient, setEditingPatient] = useState<PatientData | null>(null);
 
-  const initialFormData: PatientData = {
+  const initialFormData: Omit<PatientData, 'id' | 'userId' | 'createdAt'> = {
     anonymousId: '',
     consultationDate: new Date().toISOString().split('T')[0],
     consultationTime: new Date().toLocaleTimeString('es-ES', { 
@@ -65,45 +70,27 @@ export function Patients() {
     followUpDate: '',
   };
 
-  const [formData, setFormData] = useState<PatientData>(initialFormData);
+  const [formData, setFormData] = useState<Omit<PatientData, 'id' | 'userId' | 'createdAt'>>(initialFormData);
 
-  // Escuchar cambios de autenticación en el cliente (getAuth() se llama dentro de useEffect)
+  // 👇 MODIFICADO: Ahora filtra por userId
   useEffect(() => {
-    // Esto se ejecuta solo en el cliente porque useEffect corre en el navegador
-    const auth = getAuth();
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      console.log('[Patients] onAuthStateChanged user ->', user);
-      setUid(user?.uid ?? null);
-    });
-    return () => unsubscribeAuth();
-  }, []);
-
-  // Cargar pacientes en tiempo real desde Firebase, filtrando por ownerId
-  useEffect(() => {
-    if (!uid) {
-      setPatients([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
     const q = query(
       collection(db, 'patients'),
-      where('ownerId', '==', uid),
+      where('userId', '==', user.id), // 👈 CLAVE: Solo los pacientes de este doctor
       orderBy('createdAt', 'desc')
     );
-
+    
     const unsubscribe = onSnapshot(
-      q,
+      q, 
       (snapshot) => {
         const patientsList = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
         })) as PatientData[];
+        
         setPatients(patientsList);
         setLoading(false);
-      },
+      }, 
       (error) => {
         console.error('Error al cargar pacientes:', error);
         toast.error('Error al cargar pacientes: ' + error.message);
@@ -112,36 +99,28 @@ export function Patients() {
     );
 
     return () => unsubscribe();
-  }, [uid]);
+  }, [user.id]); // 👈 AGREGADO: Se recarga si cambia el usuario
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     // Validaciones básicas
     if (!formData.anonymousId.trim()) {
       toast.error('El ID Anónimo es obligatorio');
       return;
     }
-
+    
     if (!formData.reason.trim()) {
       toast.error('El motivo de consulta es obligatorio');
       return;
     }
 
-    // Obtener usuario actual desde la instancia cliente de Auth (seguro, estamos en cliente)
-    const auth = getAuth();
-    const currentUser = auth.currentUser;
-    const effectiveUid = uid || currentUser?.uid;
-    console.log('[Patients] handleSubmit uid (state):', uid, 'auth.currentUser:', currentUser, 'effectiveUid:', effectiveUid);
-    if (!effectiveUid) {
-      toast.error('Necesitas iniciar sesión para guardar un paciente');
-      return;
-    }
-
     setIsSaving(true);
-
+    
     try {
+      // 👇 MODIFICADO: Ahora incluye el userId
       const dataToSave = {
+        userId: user.id, // 👈 CLAVE: Guarda quién es el dueño
         anonymousId: formData.anonymousId.trim(),
         consultationDate: formData.consultationDate,
         consultationTime: formData.consultationTime,
@@ -154,20 +133,29 @@ export function Patients() {
         category: formData.category,
         followUpDate: formData.followUpDate || '',
         createdAt: serverTimestamp(),
-        ownerId: effectiveUid,
       };
 
-      console.log('Datos a guardar:', dataToSave);
-
-      const docRef = await addDoc(collection(db, 'patients'), dataToSave);
-      console.log('Documento creado con ID:', docRef.id);
-
-      toast.success('✅ Paciente registrado correctamente');
-
+      if (editingPatient && editingPatient.id) {
+        // 👇 NUEVO: Actualizar paciente existente
+        await updateDoc(doc(db, 'patients', editingPatient.id), dataToSave);
+        toast.success('✅ Paciente actualizado correctamente');
+      } else {
+        // Crear nuevo paciente
+        await addDoc(collection(db, 'patients'), dataToSave);
+        toast.success('✅ Paciente registrado correctamente');
+      }
+      
+      // Cerrar el diálogo
       setIsDialogOpen(false);
+      setEditingPatient(null);
+      
+      // Resetear el formulario
       setFormData(initialFormData);
+      
     } catch (error: any) {
       console.error('Error completo:', error);
+      
+      // Mensajes de error más específicos
       if (error.code === 'permission-denied') {
         toast.error('❌ Permisos denegados. Verifica las reglas de Firestore');
       } else if (error.code === 'unavailable') {
@@ -180,40 +168,33 @@ export function Patients() {
     }
   };
 
+  // 👇 NUEVO: Función para editar
+  const handleEdit = (patient: PatientData) => {
+    setEditingPatient(patient);
+    setFormData({
+      anonymousId: patient.anonymousId,
+      consultationDate: patient.consultationDate,
+      consultationTime: patient.consultationTime,
+      reason: patient.reason,
+      diagnosis: patient.diagnosis,
+      treatment: patient.treatment,
+      observations: patient.observations,
+      durationMinutes: patient.durationMinutes,
+      lessonsLearned: patient.lessonsLearned,
+      category: patient.category,
+      followUpDate: patient.followUpDate,
+    });
+    setIsDialogOpen(true);
+  };
+
   const filteredPatients = patients.filter(p =>
     p.anonymousId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.reason?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Eliminar paciente (comprueba propietario localmente)
   const handleDelete = async (patientId: string) => {
     if (!confirm('¿Estás seguro de que quieres eliminar este registro? Esta acción no se puede deshacer.')) {
-      return;
-    }
-
-    const patient = patients.find(p => p.id === patientId);
-    if (!patient) {
-      toast.error('Registro no encontrado localmente');
-      return;
-    }
-
-    const auth = getAuth();
-    const currentUser = auth.currentUser;
-    const effectiveUid = uid || currentUser?.uid;
-
-    if (!effectiveUid) {
-      toast.error('Necesitas iniciar sesión para eliminar un registro');
-      return;
-    }
-
-    if (patient.ownerId && patient.ownerId !== effectiveUid) {
-      toast.error('No tienes permiso para eliminar este registro');
-      return;
-    }
-
-    if (!patient.ownerId) {
-      toast.error('Este registro no tiene propietario asignado. Ejecuta la migración antes de eliminarlo.');
       return;
     }
 
@@ -223,6 +204,15 @@ export function Patients() {
     } catch (error: any) {
       console.error('Error al eliminar:', error);
       toast.error('❌ Error al eliminar el registro');
+    }
+  };
+
+  // 👇 NUEVO: Manejar cierre del diálogo
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setEditingPatient(null);
+      setFormData(initialFormData);
     }
   };
 
@@ -237,22 +227,22 @@ export function Patients() {
             Gestiona tus consultas de forma organizada y confidencial.
           </p>
         </div>
-
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+       
+        <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogTrigger asChild>
             <Button className="rounded-full px-6 shadow-lg hover:scale-105 transition-transform">
               <Plus className="w-5 h-5 mr-2" />
               Nuevo Registro
             </Button>
           </DialogTrigger>
-
+          
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-2xl font-serif">
-                Nuevo Registro de Paciente
+                {editingPatient ? 'Editar Registro de Paciente' : 'Nuevo Registro de Paciente'}
               </DialogTitle>
             </DialogHeader>
-
+            
             <form onSubmit={handleSubmit} className="space-y-6 pt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -266,7 +256,7 @@ export function Patients() {
                     onChange={e => setFormData({...formData, anonymousId: e.target.value})}
                   />
                 </div>
-
+                
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Categoría</label>
                   <select 
@@ -386,7 +376,7 @@ export function Patients() {
                 className="w-full py-6 text-lg font-bold"
                 disabled={isSaving}
               >
-                {isSaving ? 'Guardando...' : 'Guardar Registro'}
+                {isSaving ? 'Guardando...' : (editingPatient ? 'Actualizar Registro' : 'Guardar Registro')}
               </Button>
             </form>
           </DialogContent>
@@ -434,7 +424,7 @@ export function Patients() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                   {filteredPatients.map(patient => (
+                {filteredPatients.map(patient => (
                   <TableRow key={patient.id}>
                     <TableCell className="font-medium">
                       {patient.anonymousId}
@@ -449,16 +439,28 @@ export function Patients() {
                     <TableCell className="max-w-xs truncate">
                       {patient.diagnosis || '-'}
                     </TableCell>
-                <TableCell>
-  <Button
-    variant="ghost"
-    size="icon"
-    onClick={() => patient.id && handleDelete(patient.id)}
-    className="hover:bg-red-50 hover:text-red-600 transition-colors"
-  >
-    <Trash2 className="w-4 h-4" />
-  </Button>
-</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(patient)}
+                          className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                          title="Editar paciente"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => patient.id && handleDelete(patient.id)}
+                          className="hover:bg-red-50 hover:text-red-600 transition-colors"
+                          title="Eliminar paciente"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

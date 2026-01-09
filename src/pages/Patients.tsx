@@ -25,6 +25,7 @@ import {
 interface PatientData {
   id?: string;
   userId: string;
+  userEmail: string; // Agregado: para identificar por email
   anonymousId: string;
   consultationDate: string;
   consultationTime: string;
@@ -51,7 +52,7 @@ export function Patients({ user }: PatientsProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [editingPatient, setEditingPatient] = useState<PatientData | null>(null);
 
-  const initialFormData: Omit<PatientData, 'id' | 'userId' | 'createdAt'> = {
+  const initialFormData: Omit<PatientData, 'id' | 'userId' | 'userEmail' | 'createdAt'> = {
     anonymousId: '',
     consultationDate: new Date().toISOString().split('T')[0],
     consultationTime: new Date().toLocaleTimeString('es-ES', { 
@@ -69,17 +70,18 @@ export function Patients({ user }: PatientsProps) {
     followUpDate: '',
   };
 
-  const [formData, setFormData] = useState<Omit<PatientData, 'id' | 'userId' | 'createdAt'>>(initialFormData);
+  const [formData, setFormData] = useState<Omit<PatientData, 'id' | 'userId' | 'userEmail' | 'createdAt'>>(initialFormData);
 
   // Cargar pacientes - VERSIÓN SIMPLE SIN onSnapshot
   const fetchPatients = async () => {
     try {
       setLoading(true);
-      console.log('Cargando pacientes para userId:', user.id);
+      const userEmail = user.email || user.id; // Usar email como identificador
+      console.log('Cargando pacientes para:', userEmail);
       
       const q = query(
         collection(db, 'patients'),
-        where('userId', '==', user.id)
+        where('userEmail', '==', userEmail)
       );
       
       const querySnapshot = await getDocs(q);
@@ -127,8 +129,10 @@ export function Patients({ user }: PatientsProps) {
     setIsSaving(true);
     
     try {
+      const userEmail = user.email || user.id;
       const dataToSave = {
         userId: user.id,
+        userEmail: userEmail, // Guardar el email también
         anonymousId: formData.anonymousId.trim(),
         consultationDate: formData.consultationDate,
         consultationTime: formData.consultationTime,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+mport { useEffect, useState } from 'react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
@@ -16,10 +16,12 @@ import {
   query,
   orderBy,
   serverTimestamp,
-  Timestamp,
   deleteDoc,
   doc,
+  where,
 } from 'firebase/firestore';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+
 interface PatientData {
   id?: string;
   anonymousId: string;
@@ -34,6 +36,7 @@ interface PatientData {
   category: string;
   followUpDate: string;
   createdAt?: any;
+  ownerId?: string;
 }
 
 export function Patients() {
@@ -42,6 +45,7 @@ export function Patients() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [uid, setUid] = useState<string | null>(null);
 
   const initialFormData: PatientData = {
     anonymousId: '',
@@ -63,21 +67,43 @@ export function Patients() {
 
   const [formData, setFormData] = useState<PatientData>(initialFormData);
 
-  // Cargar pacientes en tiempo real desde Firebase
+  // Escuchar cambios de autenticación en el cliente (getAuth() se llama dentro de useEffect)
   useEffect(() => {
-    const q = query(collection(db, 'patients'), orderBy('createdAt', 'desc'));
-    
+    // Esto se ejecuta solo en el cliente porque useEffect corre en el navegador
+    const auth = getAuth();
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      console.log('[Patients] onAuthStateChanged user ->', user);
+      setUid(user?.uid ?? null);
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
+  // Cargar pacientes en tiempo real desde Firebase, filtrando por ownerId
+  useEffect(() => {
+    if (!uid) {
+      setPatients([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    const q = query(
+      collection(db, 'patients'),
+      where('ownerId', '==', uid),
+      orderBy('createdAt', 'desc')
+    );
+
     const unsubscribe = onSnapshot(
-      q, 
+      q,
       (snapshot) => {
         const patientsList = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
         })) as PatientData[];
-        
         setPatients(patientsList);
         setLoading(false);
-      }, 
+      },
       (error) => {
         console.error('Error al cargar pacientes:', error);
         toast.error('Error al cargar pacientes: ' + error.message);
@@ -86,26 +112,35 @@ export function Patients() {
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [uid]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validaciones básicas
     if (!formData.anonymousId.trim()) {
       toast.error('El ID Anónimo es obligatorio');
       return;
     }
-    
+
     if (!formData.reason.trim()) {
       toast.error('El motivo de consulta es obligatorio');
       return;
     }
 
+    // Obtener usuario actual desde la instancia cliente de Auth (seguro, estamos en cliente)
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    const effectiveUid = uid || currentUser?.uid;
+    console.log('[Patients] handleSubmit uid (state):', uid, 'auth.currentUser:', currentUser, 'effectiveUid:', effectiveUid);
+    if (!effectiveUid) {
+      toast.error('Necesitas iniciar sesión para guardar un paciente');
+      return;
+    }
+
     setIsSaving(true);
-    
+
     try {
-      // Preparar datos para enviar
       const dataToSave = {
         anonymousId: formData.anonymousId.trim(),
         consultationDate: formData.consultationDate,
@@ -119,27 +154,20 @@ export function Patients() {
         category: formData.category,
         followUpDate: formData.followUpDate || '',
         createdAt: serverTimestamp(),
+        ownerId: effectiveUid,
       };
 
       console.log('Datos a guardar:', dataToSave);
 
-      // Guardar en Firestore
       const docRef = await addDoc(collection(db, 'patients'), dataToSave);
-      
       console.log('Documento creado con ID:', docRef.id);
-      
+
       toast.success('✅ Paciente registrado correctamente');
-      
-      // Cerrar el diálogo
+
       setIsDialogOpen(false);
-      
-      // Resetear el formulario
       setFormData(initialFormData);
-      
     } catch (error: any) {
       console.error('Error completo:', error);
-      
-      // Mensajes de error más específicos
       if (error.code === 'permission-denied') {
         toast.error('❌ Permisos denegados. Verifica las reglas de Firestore');
       } else if (error.code === 'unavailable') {
@@ -157,9 +185,35 @@ export function Patients() {
     p.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.reason?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  // Función para eliminar un paciente
+
+  // Eliminar paciente (comprueba propietario localmente)
   const handleDelete = async (patientId: string) => {
     if (!confirm('¿Estás seguro de que quieres eliminar este registro? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    const patient = patients.find(p => p.id === patientId);
+    if (!patient) {
+      toast.error('Registro no encontrado localmente');
+      return;
+    }
+
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    const effectiveUid = uid || currentUser?.uid;
+
+    if (!effectiveUid) {
+      toast.error('Necesitas iniciar sesión para eliminar un registro');
+      return;
+    }
+
+    if (patient.ownerId && patient.ownerId !== effectiveUid) {
+      toast.error('No tienes permiso para eliminar este registro');
+      return;
+    }
+
+    if (!patient.ownerId) {
+      toast.error('Este registro no tiene propietario asignado. Ejecuta la migración antes de eliminarlo.');
       return;
     }
 
@@ -171,6 +225,7 @@ export function Patients() {
       toast.error('❌ Error al eliminar el registro');
     }
   };
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-fade-in">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -182,7 +237,7 @@ export function Patients() {
             Gestiona tus consultas de forma organizada y confidencial.
           </p>
         </div>
-       
+
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="rounded-full px-6 shadow-lg hover:scale-105 transition-transform">
@@ -190,14 +245,14 @@ export function Patients() {
               Nuevo Registro
             </Button>
           </DialogTrigger>
-          
+
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-2xl font-serif">
                 Nuevo Registro de Paciente
               </DialogTitle>
             </DialogHeader>
-            
+
             <form onSubmit={handleSubmit} className="space-y-6 pt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -211,7 +266,7 @@ export function Patients() {
                     onChange={e => setFormData({...formData, anonymousId: e.target.value})}
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Categoría</label>
                   <select 

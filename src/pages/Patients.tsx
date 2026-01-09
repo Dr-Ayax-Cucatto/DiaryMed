@@ -13,9 +13,8 @@ import { db } from '@/firebase';
 import {
   collection,
   addDoc,
-  onSnapshot,
+  getDocs,
   query,
-  orderBy,
   where,
   serverTimestamp,
   deleteDoc,
@@ -25,7 +24,7 @@ import {
 
 interface PatientData {
   id?: string;
-  userId: string; // 👈 AGREGADO: Para filtrar por usuario
+  userId: string;
   anonymousId: string;
   consultationDate: string;
   consultationTime: string;
@@ -41,7 +40,7 @@ interface PatientData {
 }
 
 interface PatientsProps {
-  user: BlinkUser; // 👈 AGREGADO: Recibe el usuario actual
+  user: BlinkUser;
 }
 
 export function Patients({ user }: PatientsProps) {
@@ -72,39 +71,49 @@ export function Patients({ user }: PatientsProps) {
 
   const [formData, setFormData] = useState<Omit<PatientData, 'id' | 'userId' | 'createdAt'>>(initialFormData);
 
-  // 👇 MODIFICADO: Ahora filtra por userId
-  useEffect(() => {
-    const q = query(
-      collection(db, 'patients'),
-      where('userId', '==', user.id), // 👈 CLAVE: Solo los pacientes de este doctor
-      orderBy('createdAt', 'desc')
-    );
-    
-    const unsubscribe = onSnapshot(
-      q, 
-      (snapshot) => {
-        const patientsList = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as PatientData[];
-        
-        setPatients(patientsList);
-        setLoading(false);
-      }, 
-      (error) => {
-        console.error('Error al cargar pacientes:', error);
-        toast.error('Error al cargar pacientes: ' + error.message);
-        setLoading(false);
-      }
-    );
+  // Cargar pacientes - VERSIÓN SIMPLE SIN onSnapshot
+  const fetchPatients = async () => {
+    try {
+      setLoading(true);
+      console.log('Cargando pacientes para userId:', user.id);
+      
+      const q = query(
+        collection(db, 'patients'),
+        where('userId', '==', user.id)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      const patientsList = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as PatientData[];
+      
+      // Ordenar manualmente por fecha (más reciente primero)
+      patientsList.sort((a, b) => {
+        const dateA = a.createdAt?.seconds || 0;
+        const dateB = b.createdAt?.seconds || 0;
+        return dateB - dateA;
+      });
+      
+      console.log('Pacientes cargados:', patientsList.length);
+      setPatients(patientsList);
+      
+    } catch (error: any) {
+      console.error('Error al cargar pacientes:', error);
+      toast.error('Error al cargar pacientes: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return () => unsubscribe();
-  }, [user.id]); // 👈 AGREGADO: Se recarga si cambia el usuario
+  useEffect(() => {
+    fetchPatients();
+  }, [user.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validaciones básicas
     if (!formData.anonymousId.trim()) {
       toast.error('El ID Anónimo es obligatorio');
       return;
@@ -118,9 +127,8 @@ export function Patients({ user }: PatientsProps) {
     setIsSaving(true);
     
     try {
-      // 👇 MODIFICADO: Ahora incluye el userId
       const dataToSave = {
-        userId: user.id, // 👈 CLAVE: Guarda quién es el dueño
+        userId: user.id,
         anonymousId: formData.anonymousId.trim(),
         consultationDate: formData.consultationDate,
         consultationTime: formData.consultationTime,
@@ -135,31 +143,31 @@ export function Patients({ user }: PatientsProps) {
         createdAt: serverTimestamp(),
       };
 
+      console.log('Guardando paciente:', dataToSave);
+
       if (editingPatient && editingPatient.id) {
-        // 👇 NUEVO: Actualizar paciente existente
+        // Actualizar
         await updateDoc(doc(db, 'patients', editingPatient.id), dataToSave);
         toast.success('✅ Paciente actualizado correctamente');
       } else {
-        // Crear nuevo paciente
+        // Crear
         await addDoc(collection(db, 'patients'), dataToSave);
         toast.success('✅ Paciente registrado correctamente');
       }
       
-      // Cerrar el diálogo
+      // Recargar lista
+      await fetchPatients();
+      
+      // Cerrar diálogo
       setIsDialogOpen(false);
       setEditingPatient(null);
-      
-      // Resetear el formulario
       setFormData(initialFormData);
       
     } catch (error: any) {
       console.error('Error completo:', error);
       
-      // Mensajes de error más específicos
       if (error.code === 'permission-denied') {
         toast.error('❌ Permisos denegados. Verifica las reglas de Firestore');
-      } else if (error.code === 'unavailable') {
-        toast.error('❌ Firebase no disponible. Verifica tu conexión');
       } else {
         toast.error('❌ Error al guardar: ' + (error.message || 'Error desconocido'));
       }
@@ -168,7 +176,6 @@ export function Patients({ user }: PatientsProps) {
     }
   };
 
-  // 👇 NUEVO: Función para editar
   const handleEdit = (patient: PatientData) => {
     setEditingPatient(patient);
     setFormData({
@@ -187,27 +194,21 @@ export function Patients({ user }: PatientsProps) {
     setIsDialogOpen(true);
   };
 
-  const filteredPatients = patients.filter(p =>
-    p.anonymousId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.reason?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   const handleDelete = async (patientId: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este registro? Esta acción no se puede deshacer.')) {
+    if (!confirm('¿Estás seguro de que quieres eliminar este registro?')) {
       return;
     }
 
     try {
       await deleteDoc(doc(db, 'patients', patientId));
       toast.success('✅ Registro eliminado correctamente');
+      await fetchPatients(); // Recargar lista
     } catch (error: any) {
       console.error('Error al eliminar:', error);
       toast.error('❌ Error al eliminar el registro');
     }
   };
 
-  // 👇 NUEVO: Manejar cierre del diálogo
   const handleDialogOpenChange = (open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
@@ -215,6 +216,12 @@ export function Patients({ user }: PatientsProps) {
       setFormData(initialFormData);
     }
   };
+
+  const filteredPatients = patients.filter(p =>
+    p.anonymousId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.reason?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-fade-in">
@@ -387,7 +394,7 @@ export function Patients({ user }: PatientsProps) {
         <CardHeader>
           <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
             <CardTitle className="text-xl font-serif">
-              Historial de Consultas
+              Historial de Consultas ({patients.length} pacientes)
             </CardTitle>
             <div className="flex gap-2 w-full md:w-auto">
               <div className="relative flex-1 md:w-64">
@@ -409,7 +416,7 @@ export function Patients({ user }: PatientsProps) {
             </div>
           ) : filteredPatients.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {searchTerm ? 'No se encontraron resultados' : 'No hay registros aún'}
+              {searchTerm ? 'No se encontraron resultados' : 'No hay registros aún. Agrega tu primer paciente.'}
             </div>
           ) : (
             <Table>

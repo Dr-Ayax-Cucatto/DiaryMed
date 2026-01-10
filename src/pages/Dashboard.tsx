@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Users, Clock, Brain, Target, TrendingUp, Calendar } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { db } from '../firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 
 interface DashboardProps {
   user: BlinkUser;
@@ -20,6 +20,8 @@ interface Stats {
 
 interface PatientData {
   id?: string;
+  userId: string;
+  userEmail: string;
   anonymousId: string;
   consultationDate: string;
   consultationTime: string;
@@ -43,16 +45,22 @@ export function Dashboard({ user }: DashboardProps) {
   });
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
 
-  // Escuchar cambios de pacientes en Firebase en tiempo real
+  // 👇 ARREGLADO: Ahora filtra por usuario
   useEffect(() => {
-    console.log('🔥 Iniciando listener de Firebase...');
+    const userEmail = user.email || user.id;
+    console.log('🔥 Iniciando listener de Firebase para usuario:', userEmail);
     
-    const q = query(collection(db, 'patients'), orderBy('createdAt', 'desc'));
+    // Crear query con filtro por userEmail
+    const q = query(
+      collection(db, 'patients'),
+      where('userEmail', '==', userEmail), // 👈 FILTRO AGREGADO
+      orderBy('createdAt', 'desc')
+    );
     
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        console.log('📊 Datos recibidos de Firebase:', snapshot.docs.length, 'pacientes');
+        console.log('📊 Datos recibidos de Firebase:', snapshot.docs.length, 'pacientes del usuario');
         
         const patients = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -70,7 +78,7 @@ export function Dashboard({ user }: DashboardProps) {
       console.log('🛑 Limpiando listener de Firebase');
       unsubscribe();
     };
-  }, []);
+  }, [user.email, user.id]); // 👈 Dependencias actualizadas
 
   // Cargar metas activas de Blink
   useEffect(() => {

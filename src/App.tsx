@@ -43,9 +43,9 @@ function App() {
   if (!user) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-background p-4 text-center">
-        <h1 className="text-4xl font-bold text-primary mb-4 font-serif">MediTrack Diario Pro</h1>
+        <h1 className="text-4xl font-bold text-primary mb-4 font-serif">DiaryMed</h1>
         <p className="text-muted-foreground mb-8 max-w-md">
-          Tu diario digital profesional, confidencial y organizado para la práctica médica moderna.
+          Tu diario digital, confidencial y organizado para tu desarrollo profesional. 
         </p>
         <button
           onClick={() => blink.auth.login()}

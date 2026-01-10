@@ -16,6 +16,7 @@ import {
   getDocs,
   query,
   where,
+  serverTimestamp,
   deleteDoc,
   doc,
   updateDoc,
@@ -23,7 +24,8 @@ import {
 
 interface PatientData {
   id?: string;
-  userEmail: string; // SIMPLE: solo usamos el email
+  userId: string;
+  userEmail: string; // Agregado: para identificar por email
   anonymousId: string;
   consultationDate: string;
   consultationTime: string;
@@ -50,12 +52,7 @@ export function Patients({ user }: PatientsProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [editingPatient, setEditingPatient] = useState<PatientData | null>(null);
 
-  // Obtener el identificador del usuario (email o ID)
-  const getUserIdentifier = () => {
-    return user.email || user.id || 'unknown';
-  };
-
-  const initialFormData: Omit<PatientData, 'id' | 'userEmail' | 'createdAt'> = {
+  const initialFormData: Omit<PatientData, 'id' | 'userId' | 'userEmail' | 'createdAt'> = {
     anonymousId: '',
     consultationDate: new Date().toISOString().split('T')[0],
     consultationTime: new Date().toLocaleTimeString('es-ES', { 
@@ -73,18 +70,18 @@ export function Patients({ user }: PatientsProps) {
     followUpDate: '',
   };
 
-  const [formData, setFormData] = useState<Omit<PatientData, 'id' | 'userEmail' | 'createdAt'>>(initialFormData);
+  const [formData, setFormData] = useState<Omit<PatientData, 'id' | 'userId' | 'userEmail' | 'createdAt'>>(initialFormData);
 
-  // Cargar pacientes del usuario actual
+  // Cargar pacientes - VERSIÓN SIMPLE SIN onSnapshot
   const fetchPatients = async () => {
     try {
       setLoading(true);
-      const userIdentifier = getUserIdentifier();
-      console.log('📋 Cargando pacientes para:', userIdentifier);
+      const userEmail = user.email || user.id; // Usar email como identificador
+      console.log('Cargando pacientes para:', userEmail);
       
       const q = query(
         collection(db, 'patients'),
-        where('userEmail', '==', userIdentifier)
+        where('userEmail', '==', userEmail)
       );
       
       const querySnapshot = await getDocs(q);
@@ -94,12 +91,19 @@ export function Patients({ user }: PatientsProps) {
         ...doc.data(),
       })) as PatientData[];
       
-      console.log('✅ Pacientes cargados:', patientsList.length);
+      // Ordenar manualmente por fecha (más reciente primero)
+      patientsList.sort((a, b) => {
+        const dateA = a.createdAt?.seconds || 0;
+        const dateB = b.createdAt?.seconds || 0;
+        return dateB - dateA;
+      });
+      
+      console.log('Pacientes cargados:', patientsList.length);
       setPatients(patientsList);
       
     } catch (error: any) {
-      console.error('❌ Error al cargar pacientes:', error);
-      toast.error('Error al cargar: ' + error.message);
+      console.error('Error al cargar pacientes:', error);
+      toast.error('Error al cargar pacientes: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -125,11 +129,10 @@ export function Patients({ user }: PatientsProps) {
     setIsSaving(true);
     
     try {
-      const userIdentifier = getUserIdentifier();
-      const timestamp = new Date().toISOString();
-      
+      const userEmail = user.email || user.id;
       const dataToSave = {
-        userEmail: userIdentifier,
+        userId: user.id,
+        userEmail: userEmail, // Guardar el email también
         anonymousId: formData.anonymousId.trim(),
         consultationDate: formData.consultationDate,
         consultationTime: formData.consultationTime,
@@ -141,21 +144,19 @@ export function Patients({ user }: PatientsProps) {
         lessonsLearned: formData.lessonsLearned.trim(),
         category: formData.category,
         followUpDate: formData.followUpDate || '',
-        createdAt: timestamp,
+        createdAt: serverTimestamp(),
       };
 
-      console.log('💾 Guardando paciente:', dataToSave);
+      console.log('Guardando paciente:', dataToSave);
 
       if (editingPatient && editingPatient.id) {
         // Actualizar
         await updateDoc(doc(db, 'patients', editingPatient.id), dataToSave);
-        console.log('✅ Paciente actualizado');
-        toast.success('✅ Paciente actualizado');
+        toast.success('✅ Paciente actualizado correctamente');
       } else {
         // Crear
-        const docRef = await addDoc(collection(db, 'patients'), dataToSave);
-        console.log('✅ Paciente creado con ID:', docRef.id);
-        toast.success('✅ Paciente registrado');
+        await addDoc(collection(db, 'patients'), dataToSave);
+        toast.success('✅ Paciente registrado correctamente');
       }
       
       // Recargar lista
@@ -167,14 +168,12 @@ export function Patients({ user }: PatientsProps) {
       setFormData(initialFormData);
       
     } catch (error: any) {
-      console.error('❌ Error completo:', error);
-      console.error('Código de error:', error.code);
-      console.error('Mensaje:', error.message);
+      console.error('Error completo:', error);
       
       if (error.code === 'permission-denied') {
-        toast.error('❌ Permisos denegados. Verifica las reglas de Firebase');
+        toast.error('❌ Permisos denegados. Verifica las reglas de Firestore');
       } else {
-        toast.error('❌ Error: ' + error.message);
+        toast.error('❌ Error al guardar: ' + (error.message || 'Error desconocido'));
       }
     } finally {
       setIsSaving(false);
@@ -200,18 +199,17 @@ export function Patients({ user }: PatientsProps) {
   };
 
   const handleDelete = async (patientId: string) => {
-    if (!confirm('¿Estás seguro de eliminar este registro?')) {
+    if (!confirm('¿Estás seguro de que quieres eliminar este registro?')) {
       return;
     }
 
     try {
       await deleteDoc(doc(db, 'patients', patientId));
-      console.log('✅ Paciente eliminado');
-      toast.success('✅ Registro eliminado');
-      await fetchPatients();
+      toast.success('✅ Registro eliminado correctamente');
+      await fetchPatients(); // Recargar lista
     } catch (error: any) {
-      console.error('❌ Error al eliminar:', error);
-      toast.error('❌ Error al eliminar');
+      console.error('Error al eliminar:', error);
+      toast.error('❌ Error al eliminar el registro');
     }
   };
 
@@ -237,7 +235,7 @@ export function Patients({ user }: PatientsProps) {
             Registro de Pacientes
           </h1>
           <p className="text-muted-foreground mt-2">
-            Usuario actual: {getUserIdentifier()}
+            Gestiona tus consultas de forma organizada y confidencial.
           </p>
         </div>
        
@@ -252,7 +250,7 @@ export function Patients({ user }: PatientsProps) {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-2xl font-serif">
-                {editingPatient ? 'Editar Paciente' : 'Nuevo Paciente'}
+                {editingPatient ? 'Editar Registro de Paciente' : 'Nuevo Registro de Paciente'}
               </DialogTitle>
             </DialogHeader>
             
@@ -389,7 +387,7 @@ export function Patients({ user }: PatientsProps) {
                 className="w-full py-6 text-lg font-bold"
                 disabled={isSaving}
               >
-                {isSaving ? 'Guardando...' : (editingPatient ? 'Actualizar' : 'Guardar')}
+                {isSaving ? 'Guardando...' : (editingPatient ? 'Actualizar Registro' : 'Guardar Registro')}
               </Button>
             </form>
           </DialogContent>
@@ -400,13 +398,13 @@ export function Patients({ user }: PatientsProps) {
         <CardHeader>
           <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
             <CardTitle className="text-xl font-serif">
-              Mis Pacientes ({patients.length})
+              Historial de Consultas ({patients.length} pacientes)
             </CardTitle>
             <div className="flex gap-2 w-full md:w-auto">
               <div className="relative flex-1 md:w-64">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <Input
-                  placeholder="Buscar..."
+                  placeholder="Buscar paciente..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -418,11 +416,11 @@ export function Patients({ user }: PatientsProps) {
         <CardContent>
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">
-              Cargando...
+              Cargando pacientes...
             </div>
           ) : filteredPatients.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {searchTerm ? 'No se encontraron resultados' : 'No hay pacientes registrados'}
+              {searchTerm ? 'No se encontraron resultados' : 'No hay registros aún. Agrega tu primer paciente.'}
             </div>
           ) : (
             <Table>
@@ -458,8 +456,8 @@ export function Patients({ user }: PatientsProps) {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleEdit(patient)}
-                          className="hover:bg-blue-50 hover:text-blue-600"
-                          title="Editar"
+                          className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                          title="Editar paciente"
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
@@ -467,8 +465,8 @@ export function Patients({ user }: PatientsProps) {
                           variant="ghost"
                           size="icon"
                           onClick={() => patient.id && handleDelete(patient.id)}
-                          className="hover:bg-red-50 hover:text-red-600"
-                          title="Eliminar"
+                          className="hover:bg-red-50 hover:text-red-600 transition-colors"
+                          title="Eliminar paciente"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -484,5 +482,3 @@ export function Patients({ user }: PatientsProps) {
     </div>
   );
 }
-                  
-      

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Users, Clock, Brain, Target, TrendingUp, Calendar } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { db } from '../firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 
 interface DashboardProps {
   user: BlinkUser;
@@ -20,6 +20,8 @@ interface Stats {
 
 interface PatientData {
   id?: string;
+  userId: string;
+  userEmail: string;
   anonymousId: string;
   consultationDate: string;
   consultationTime: string;
@@ -43,21 +45,51 @@ export function Dashboard({ user }: DashboardProps) {
   });
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
 
-  // Escuchar cambios de pacientes en Firebase en tiempo real
+  // 👇 ARREGLADO: Ahora filtra por usuario (sin orderBy para evitar índice)
   useEffect(() => {
-    console.log('🔥 Iniciando listener de Firebase...');
+    const userEmail = user.email || user.id;
     
-    const q = query(collection(db, 'patients'), orderBy('createdAt', 'desc'));
+    // 🐛 DEBUG - Información del usuario
+    console.log('==================== DEBUG DASHBOARD ====================');
+    console.log('👤 Usuario completo:', user);
+    console.log('📧 user.email:', user.email);
+    console.log('🆔 user.id:', user.id);
+    console.log('🔍 Buscando pacientes con userEmail:', userEmail);
+    console.log('=========================================================');
+    
+    // Crear query con filtro por userEmail (SIN orderBy para evitar error de índice)
+    const q = query(
+      collection(db, 'patients'),
+      where('userEmail', '==', userEmail) // 👈 Solo filtro, sin ordenar
+    );
     
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        console.log('📊 Datos recibidos de Firebase:', snapshot.docs.length, 'pacientes');
+        console.log('==================== FIREBASE RESPONSE ====================');
+        console.log('📊 Total documentos recibidos:', snapshot.docs.length);
+        
+        snapshot.docs.forEach((doc, index) => {
+          console.log(`Paciente ${index + 1}:`, {
+            id: doc.id,
+            data: doc.data()
+          });
+        });
         
         const patients = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
         })) as PatientData[];
+        
+        console.log('✅ Pacientes procesados:', patients);
+        console.log('===========================================================');
+        
+        // Ordenar manualmente en el cliente por fecha (más reciente primero)
+        patients.sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0).getTime();
+          const dateB = new Date(b.createdAt || 0).getTime();
+          return dateB - dateA;
+        });
         
         calculateStats(patients);
       },
@@ -70,7 +102,7 @@ export function Dashboard({ user }: DashboardProps) {
       console.log('🛑 Limpiando listener de Firebase');
       unsubscribe();
     };
-  }, []);
+  }, [user.email, user.id]); // 👈 Dependencias actualizadas
 
   // Cargar metas activas de Blink
   useEffect(() => {

@@ -21,7 +21,7 @@ export function Sidebar({ currentPage, setCurrentPage, user }: SidebarProps) {
     <aside className="w-64 h-full border-r bg-sidebar flex flex-col">
       <div className="p-6 border-b flex items-center gap-3">
         <HeartPulse className="text-primary w-8 h-8" />
-        <span className="font-serif font-bold text-xl text-primary">MediTrack</span>
+        <span className="font-serif font-bold text-xl text-primary">DiaryMed</span>
       </div>
 
       <nav className="flex-1 p-4 space-y-2">

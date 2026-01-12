@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { BlinkUser } from '@blinkdotnew/sdk';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
@@ -6,22 +7,25 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Search, Filter, Calendar, Clock, BookOpen, Trash2 } from 'lucide-react';
+import { Plus, Search, Calendar, Clock, BookOpen, Trash2, Edit } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { db } from '@/firebase';
 import {
   collection,
   addDoc,
-  onSnapshot,
+  getDocs,
   query,
-  orderBy,
+  where,
   serverTimestamp,
-  Timestamp,
   deleteDoc,
   doc,
+  updateDoc,
 } from 'firebase/firestore';
+
 interface PatientData {
   id?: string;
+  userId: string;
+  userEmail: string; // Agregado: para identificar por email
   anonymousId: string;
   consultationDate: string;
   consultationTime: string;
@@ -36,14 +40,19 @@ interface PatientData {
   createdAt?: any;
 }
 
-export function Patients() {
+interface PatientsProps {
+  user: BlinkUser;
+}
+
+export function Patients({ user }: PatientsProps) {
   const [patients, setPatients] = useState<PatientData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<PatientData | null>(null);
 
-  const initialFormData: PatientData = {
+  const initialFormData: Omit<PatientData, 'id' | 'userId' | 'userEmail' | 'createdAt'> = {
     anonymousId: '',
     consultationDate: new Date().toISOString().split('T')[0],
     consultationTime: new Date().toLocaleTimeString('es-ES', { 
@@ -61,37 +70,52 @@ export function Patients() {
     followUpDate: '',
   };
 
-  const [formData, setFormData] = useState<PatientData>(initialFormData);
+  const [formData, setFormData] = useState<Omit<PatientData, 'id' | 'userId' | 'userEmail' | 'createdAt'>>(initialFormData);
 
-  // Cargar pacientes en tiempo real desde Firebase
+  // Cargar pacientes - VERSIÓN SIMPLE SIN onSnapshot
+  const fetchPatients = async () => {
+    try {
+      setLoading(true);
+      const userEmail = user.email || user.id; // Usar email como identificador
+      console.log('Cargando pacientes para:', userEmail);
+      
+      const q = query(
+        collection(db, 'patients'),
+        where('userEmail', '==', userEmail)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      const patientsList = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as PatientData[];
+      
+      // Ordenar manualmente por fecha (más reciente primero)
+      patientsList.sort((a, b) => {
+        const dateA = a.createdAt?.seconds || 0;
+        const dateB = b.createdAt?.seconds || 0;
+        return dateB - dateA;
+      });
+      
+      console.log('Pacientes cargados:', patientsList.length);
+      setPatients(patientsList);
+      
+    } catch (error: any) {
+      console.error('Error al cargar pacientes:', error);
+      toast.error('Error al cargar pacientes: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const q = query(collection(db, 'patients'), orderBy('createdAt', 'desc'));
-    
-    const unsubscribe = onSnapshot(
-      q, 
-      (snapshot) => {
-        const patientsList = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as PatientData[];
-        
-        setPatients(patientsList);
-        setLoading(false);
-      }, 
-      (error) => {
-        console.error('Error al cargar pacientes:', error);
-        toast.error('Error al cargar pacientes: ' + error.message);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
+    fetchPatients();
+  }, [user.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validaciones básicas
     if (!formData.anonymousId.trim()) {
       toast.error('El ID Anónimo es obligatorio');
       return;
@@ -105,8 +129,10 @@ export function Patients() {
     setIsSaving(true);
     
     try {
-      // Preparar datos para enviar
+      const userEmail = user.email || user.id;
       const dataToSave = {
+        userId: user.id,
+        userEmail: userEmail, // Guardar el email también
         anonymousId: formData.anonymousId.trim(),
         consultationDate: formData.consultationDate,
         consultationTime: formData.consultationTime,
@@ -121,29 +147,31 @@ export function Patients() {
         createdAt: serverTimestamp(),
       };
 
-      console.log('Datos a guardar:', dataToSave);
+      console.log('Guardando paciente:', dataToSave);
 
-      // Guardar en Firestore
-      const docRef = await addDoc(collection(db, 'patients'), dataToSave);
+      if (editingPatient && editingPatient.id) {
+        // Actualizar
+        await updateDoc(doc(db, 'patients', editingPatient.id), dataToSave);
+        toast.success('✅ Paciente actualizado correctamente');
+      } else {
+        // Crear
+        await addDoc(collection(db, 'patients'), dataToSave);
+        toast.success('✅ Paciente registrado correctamente');
+      }
       
-      console.log('Documento creado con ID:', docRef.id);
+      // Recargar lista
+      await fetchPatients();
       
-      toast.success('✅ Paciente registrado correctamente');
-      
-      // Cerrar el diálogo
+      // Cerrar diálogo
       setIsDialogOpen(false);
-      
-      // Resetear el formulario
+      setEditingPatient(null);
       setFormData(initialFormData);
       
     } catch (error: any) {
       console.error('Error completo:', error);
       
-      // Mensajes de error más específicos
       if (error.code === 'permission-denied') {
         toast.error('❌ Permisos denegados. Verifica las reglas de Firestore');
-      } else if (error.code === 'unavailable') {
-        toast.error('❌ Firebase no disponible. Verifica tu conexión');
       } else {
         toast.error('❌ Error al guardar: ' + (error.message || 'Error desconocido'));
       }
@@ -152,25 +180,53 @@ export function Patients() {
     }
   };
 
-  const filteredPatients = patients.filter(p =>
-    p.anonymousId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.reason?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  // Función para eliminar un paciente
+  const handleEdit = (patient: PatientData) => {
+    setEditingPatient(patient);
+    setFormData({
+      anonymousId: patient.anonymousId,
+      consultationDate: patient.consultationDate,
+      consultationTime: patient.consultationTime,
+      reason: patient.reason,
+      diagnosis: patient.diagnosis,
+      treatment: patient.treatment,
+      observations: patient.observations,
+      durationMinutes: patient.durationMinutes,
+      lessonsLearned: patient.lessonsLearned,
+      category: patient.category,
+      followUpDate: patient.followUpDate,
+    });
+    setIsDialogOpen(true);
+  };
+
   const handleDelete = async (patientId: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este registro? Esta acción no se puede deshacer.')) {
+    if (!confirm('¿Estás seguro de que quieres eliminar este registro?')) {
       return;
     }
 
     try {
       await deleteDoc(doc(db, 'patients', patientId));
       toast.success('✅ Registro eliminado correctamente');
+      await fetchPatients(); // Recargar lista
     } catch (error: any) {
       console.error('Error al eliminar:', error);
       toast.error('❌ Error al eliminar el registro');
     }
   };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setEditingPatient(null);
+      setFormData(initialFormData);
+    }
+  };
+
+  const filteredPatients = patients.filter(p =>
+    p.anonymousId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.reason?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-fade-in">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -183,7 +239,7 @@ export function Patients() {
           </p>
         </div>
        
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogTrigger asChild>
             <Button className="rounded-full px-6 shadow-lg hover:scale-105 transition-transform">
               <Plus className="w-5 h-5 mr-2" />
@@ -194,7 +250,7 @@ export function Patients() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-2xl font-serif">
-                Nuevo Registro de Paciente
+                {editingPatient ? 'Editar Registro de Paciente' : 'Nuevo Registro de Paciente'}
               </DialogTitle>
             </DialogHeader>
             
@@ -331,7 +387,7 @@ export function Patients() {
                 className="w-full py-6 text-lg font-bold"
                 disabled={isSaving}
               >
-                {isSaving ? 'Guardando...' : 'Guardar Registro'}
+                {isSaving ? 'Guardando...' : (editingPatient ? 'Actualizar Registro' : 'Guardar Registro')}
               </Button>
             </form>
           </DialogContent>
@@ -342,7 +398,7 @@ export function Patients() {
         <CardHeader>
           <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
             <CardTitle className="text-xl font-serif">
-              Historial de Consultas
+              Historial de Consultas ({patients.length} pacientes)
             </CardTitle>
             <div className="flex gap-2 w-full md:w-auto">
               <div className="relative flex-1 md:w-64">
@@ -364,7 +420,7 @@ export function Patients() {
             </div>
           ) : filteredPatients.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {searchTerm ? 'No se encontraron resultados' : 'No hay registros aún'}
+              {searchTerm ? 'No se encontraron resultados' : 'No hay registros aún. Agrega tu primer paciente.'}
             </div>
           ) : (
             <Table>
@@ -379,7 +435,7 @@ export function Patients() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                   {filteredPatients.map(patient => (
+                {filteredPatients.map(patient => (
                   <TableRow key={patient.id}>
                     <TableCell className="font-medium">
                       {patient.anonymousId}
@@ -394,16 +450,28 @@ export function Patients() {
                     <TableCell className="max-w-xs truncate">
                       {patient.diagnosis || '-'}
                     </TableCell>
-                <TableCell>
-  <Button
-    variant="ghost"
-    size="icon"
-    onClick={() => patient.id && handleDelete(patient.id)}
-    className="hover:bg-red-50 hover:text-red-600 transition-colors"
-  >
-    <Trash2 className="w-4 h-4" />
-  </Button>
-</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(patient)}
+                          className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                          title="Editar paciente"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => patient.id && handleDelete(patient.id)}
+                          className="hover:bg-red-50 hover:text-red-600 transition-colors"
+                          title="Eliminar paciente"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

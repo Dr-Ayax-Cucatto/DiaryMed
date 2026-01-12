@@ -7,6 +7,7 @@ import { Patients } from './pages/Patients'
 import { Reflections } from './pages/Reflections'
 import { Goals } from './pages/Goals'
 import { Spinner } from './components/ui/spinner'
+import { authenticateFirebase } from './firebase' // 👈 NUEVO
 
 function App() {
   const [user, setUser] = useState<BlinkUser | null>(null)
@@ -14,9 +15,19 @@ function App() {
   const [currentPage, setCurrentPage] = useState<'dashboard' | 'patients' | 'reflections' | 'goals'>('dashboard')
 
   useEffect(() => {
-    const unsubscribe = blink.auth.onAuthStateChanged((state) => {
+    const unsubscribe = blink.auth.onAuthStateChanged(async (state) => {
       setUser(state.user)
       setLoading(state.isLoading)
+      
+      // 👇 NUEVO: Autenticar en Firebase cuando el usuario se loguea en Blink
+      if (state.user && !state.isLoading) {
+        try {
+          await authenticateFirebase(state.user.email || state.user.id);
+          console.log('✅ Usuario autenticado en Firebase también');
+        } catch (error) {
+          console.error('⚠️ Error al autenticar en Firebase:', error);
+        }
+      }
     })
     return unsubscribe
   }, [])
@@ -32,9 +43,9 @@ function App() {
   if (!user) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-background p-4 text-center">
-        <h1 className="text-4xl font-bold text-primary mb-4 font-serif">MediTrack Diario Pro</h1>
+        <h1 className="text-4xl font-bold text-primary mb-4 font-serif">DiaryMed</h1>
         <p className="text-muted-foreground mb-8 max-w-md">
-          Tu diario digital profesional, confidencial y organizado para la práctica médica moderna.
+          Tu diario digital, confidencial y organizado para tu desarrollo profesional. 
         </p>
         <button
           onClick={() => blink.auth.login()}
@@ -71,4 +82,4 @@ function App() {
   )
 }
 
-export default App 
+export default App

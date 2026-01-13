@@ -258,11 +258,11 @@ export function Patients({ user }: PatientsProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
-                    ID Anónimo (Código) *
+                    ID (DNI)*
                   </label>
                   <Input 
                     required 
-                    placeholder="Ej: PAC-001" 
+                    placeholder="ID o nro. de DNI" 
                     value={formData.anonymousId}
                     onChange={e => setFormData({...formData, anonymousId: e.target.value})}
                   />

@@ -280,7 +280,12 @@ export function Patients({ user }: PatientsProps) {
                     <option>Crónico</option>
                     <option>Emergencia</option>
                     <option>Cirugía</option>
-                    <option>Seguimiento</option>
+                    <option>Salud mental</option>
+                    <option>Obstétrico/Ginecológico</option>
+                    <option>Salud mental</option>
+                    <option>Geriatrico</option>
+                    <option>Oncológico</option>
+                    <option>Infectólogico/Transmisible</option>
                   </select>
                 </div>
 
@@ -360,9 +365,9 @@ export function Patients({ user }: PatientsProps) {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Observaciones</label>
+                <label className="text-sm font-medium">Seguimiento</label>
                 <Textarea 
-                  placeholder="Observaciones adicionales..."
+                  placeholder="Se recomienda anotar la fecha de cada consulta futura..."
                   value={formData.observations}
                   onChange={e => setFormData({...formData, observations: e.target.value})}
                   className="min-h-[60px]"

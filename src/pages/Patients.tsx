@@ -280,7 +280,6 @@ export function Patients({ user }: PatientsProps) {
                     <option>Crónico</option>
                     <option>Emergencia</option>
                     <option>Cirugía</option>
-                    <option>Salud mental</option>
                     <option>Obstétrico/Ginecológico</option>
                     <option>Salud mental</option>
                     <option>Geriatrico</option>

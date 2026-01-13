@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Search, Calendar, Clock, BookOpen, Trash2, Edit } from 'lucide-react';
+import { Plus, Search, Calendar, Clock, BookOpen, Trash2, Edit, User } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { db } from '@/firebase';
 import {
@@ -25,8 +25,19 @@ import {
 interface PatientData {
   id?: string;
   userId: string;
-  userEmail: string; // Agregado: para identificar por email
+  userEmail: string;
+  // Datos de identificación
   anonymousId: string;
+  // NUEVOS CAMPOS - Datos del paciente
+  patientName: string;
+  patientAge: number | string;
+  patientGender: string;
+  // NUEVOS CAMPOS - Historial médico
+  familyHistory: string;
+  currentIllness: string;
+  anamnesis: string;
+  labResults: string;
+  // Campos existentes
   consultationDate: string;
   consultationTime: string;
   reason: string;
@@ -54,6 +65,13 @@ export function Patients({ user }: PatientsProps) {
 
   const initialFormData: Omit<PatientData, 'id' | 'userId' | 'userEmail' | 'createdAt'> = {
     anonymousId: '',
+    patientName: '',
+    patientAge: '',
+    patientGender: 'Masculino',
+    familyHistory: '',
+    currentIllness: '',
+    anamnesis: '',
+    labResults: '',
     consultationDate: new Date().toISOString().split('T')[0],
     consultationTime: new Date().toLocaleTimeString('es-ES', { 
       hour: '2-digit', 
@@ -72,11 +90,10 @@ export function Patients({ user }: PatientsProps) {
 
   const [formData, setFormData] = useState<Omit<PatientData, 'id' | 'userId' | 'userEmail' | 'createdAt'>>(initialFormData);
 
-  // Cargar pacientes - VERSIÓN SIMPLE SIN onSnapshot
   const fetchPatients = async () => {
     try {
       setLoading(true);
-      const userEmail = user.email || user.id; // Usar email como identificador
+      const userEmail = user.email || user.id;
       console.log('Cargando pacientes para:', userEmail);
       
       const q = query(
@@ -91,7 +108,6 @@ export function Patients({ user }: PatientsProps) {
         ...doc.data(),
       })) as PatientData[];
       
-      // Ordenar manualmente por fecha (más reciente primero)
       patientsList.sort((a, b) => {
         const dateA = a.createdAt?.seconds || 0;
         const dateB = b.createdAt?.seconds || 0;
@@ -117,7 +133,12 @@ export function Patients({ user }: PatientsProps) {
     e.preventDefault();
     
     if (!formData.anonymousId.trim()) {
-      toast.error('El ID Anónimo es obligatorio');
+      toast.error('El ID es obligatorio');
+      return;
+    }
+
+    if (!formData.patientName.trim()) {
+      toast.error('El nombre del paciente es obligatorio');
       return;
     }
     
@@ -132,8 +153,15 @@ export function Patients({ user }: PatientsProps) {
       const userEmail = user.email || user.id;
       const dataToSave = {
         userId: user.id,
-        userEmail: userEmail, // Guardar el email también
+        userEmail: userEmail,
         anonymousId: formData.anonymousId.trim(),
+        patientName: formData.patientName.trim(),
+        patientAge: formData.patientAge,
+        patientGender: formData.patientGender,
+        familyHistory: formData.familyHistory.trim(),
+        currentIllness: formData.currentIllness.trim(),
+        anamnesis: formData.anamnesis.trim(),
+        labResults: formData.labResults.trim(),
         consultationDate: formData.consultationDate,
         consultationTime: formData.consultationTime,
         reason: formData.reason.trim(),
@@ -150,19 +178,14 @@ export function Patients({ user }: PatientsProps) {
       console.log('Guardando paciente:', dataToSave);
 
       if (editingPatient && editingPatient.id) {
-        // Actualizar
         await updateDoc(doc(db, 'patients', editingPatient.id), dataToSave);
         toast.success('✅ Paciente actualizado correctamente');
       } else {
-        // Crear
         await addDoc(collection(db, 'patients'), dataToSave);
         toast.success('✅ Paciente registrado correctamente');
       }
       
-      // Recargar lista
       await fetchPatients();
-      
-      // Cerrar diálogo
       setIsDialogOpen(false);
       setEditingPatient(null);
       setFormData(initialFormData);
@@ -184,6 +207,13 @@ export function Patients({ user }: PatientsProps) {
     setEditingPatient(patient);
     setFormData({
       anonymousId: patient.anonymousId,
+      patientName: patient.patientName || '',
+      patientAge: patient.patientAge || '',
+      patientGender: patient.patientGender || 'Masculino',
+      familyHistory: patient.familyHistory || '',
+      currentIllness: patient.currentIllness || '',
+      anamnesis: patient.anamnesis || '',
+      labResults: patient.labResults || '',
       consultationDate: patient.consultationDate,
       consultationTime: patient.consultationTime,
       reason: patient.reason,
@@ -206,7 +236,7 @@ export function Patients({ user }: PatientsProps) {
     try {
       await deleteDoc(doc(db, 'patients', patientId));
       toast.success('✅ Registro eliminado correctamente');
-      await fetchPatients(); // Recargar lista
+      await fetchPatients();
     } catch (error: any) {
       console.error('Error al eliminar:', error);
       toast.error('❌ Error al eliminar el registro');
@@ -223,6 +253,7 @@ export function Patients({ user }: PatientsProps) {
 
   const filteredPatients = patients.filter(p =>
     p.anonymousId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.diagnosis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.reason?.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -247,143 +278,236 @@ export function Patients({ user }: PatientsProps) {
             </Button>
           </DialogTrigger>
           
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-2xl font-serif">
                 {editingPatient ? 'Editar Registro de Paciente' : 'Nuevo Registro de Paciente'}
               </DialogTitle>
             </DialogHeader>
             
-            <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    ID (DNI)*
-                  </label>
-                  <Input 
-                    required 
-                    placeholder="ID o nro. de DNI" 
-                    value={formData.anonymousId}
-                    onChange={e => setFormData({...formData, anonymousId: e.target.value})}
-                  />
+            <form onSubmit={handleSubmit} className="space-y-8 pt-4">
+              {/* SECCIÓN: DATOS DEL PACIENTE */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <User className="w-5 h-5 text-primary" />
+                  <h3 className="text-lg font-semibold text-primary">Datos del Paciente</h3>
                 </div>
                 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Categoría</label>
-                  <select 
-                    className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                    value={formData.category}
-                    onChange={e => setFormData({...formData, category: e.target.value})}
-                  >
-                    <option>General</option>
-                    <option>Pediátrico</option>
-                    <option>Crónico</option>
-                    <option>Emergencia</option>
-                    <option>Cirugía</option>
-                    <option>Obstétrico/Ginecológico</option>
-                    <option>Salud mental</option>
-                    <option>Geriatrico</option>
-                    <option>Oncológico</option>
-                    <option>Infectólogico/Transmisible</option>
-                  </select>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">ID/DNI *</label>
+                    <Input 
+                      required 
+                      placeholder="ID o DNI" 
+                      value={formData.anonymousId}
+                      onChange={e => setFormData({...formData, anonymousId: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm font-medium">Nombre Completo *</label>
+                    <Input 
+                      required 
+                      placeholder="Nombre del paciente" 
+                      value={formData.patientName}
+                      onChange={e => setFormData({...formData, patientName: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Edad</label>
+                    <Input 
+                      type="number" 
+                      placeholder="Edad" 
+                      value={formData.patientAge}
+                      onChange={e => setFormData({...formData, patientAge: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Sexo Biológico / Género</label>
+                    <select 
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                      value={formData.patientGender}
+                      onChange={e => setFormData({...formData, patientGender: e.target.value})}
+                    >
+                      <option>Masculino</option>
+                      <option>Femenino</option>
+                      <option>Otro</option>
+                      <option>Prefiere no decir</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECCIÓN: HISTORIAL MÉDICO */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <BookOpen className="w-5 h-5 text-primary" />
+                  <h3 className="text-lg font-semibold text-primary">Historial Médico</h3>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    Fecha de Consulta
-                  </label>
-                  <Input 
-                    type="date" 
-                    value={formData.consultationDate}
-                    onChange={e => setFormData({...formData, consultationDate: e.target.value})}
+                  <label className="text-sm font-medium">Antecedentes Familiares</label>
+                  <Textarea 
+                    placeholder="Enfermedades familiares relevantes, factores de riesgo hereditarios..."
+                    value={formData.familyHistory}
+                    onChange={e => setFormData({...formData, familyHistory: e.target.value})}
+                    className="min-h-[80px]"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    Hora de Consulta
-                  </label>
-                  <Input 
-                    type="time" 
-                    value={formData.consultationTime}
-                    onChange={e => setFormData({...formData, consultationTime: e.target.value})}
+                  <label className="text-sm font-medium">Enfermedad Actual</label>
+                  <Textarea 
+                    placeholder="Descripción de la enfermedad o condición actual del paciente..."
+                    value={formData.currentIllness}
+                    onChange={e => setFormData({...formData, currentIllness: e.target.value})}
+                    className="min-h-[80px]"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Duración (minutos)</label>
-                  <Input 
-                    type="number" 
-                    min="1"
-                    value={formData.durationMinutes}
-                    onChange={e => setFormData({...formData, durationMinutes: Number(e.target.value)})}
+                  <label className="text-sm font-medium">Anamnesis (Descripción Breve)</label>
+                  <Textarea 
+                    placeholder="Historia clínica resumida, síntomas principales, evolución..."
+                    value={formData.anamnesis}
+                    onChange={e => setFormData({...formData, anamnesis: e.target.value})}
+                    className="min-h-[100px]"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Fecha de Seguimiento</label>
-                  <Input 
-                    type="date" 
-                    value={formData.followUpDate}
-                    onChange={e => setFormData({...formData, followUpDate: e.target.value})}
+                  <label className="text-sm font-medium">Estudios / Laboratorio</label>
+                  <Textarea 
+                    placeholder="Copiar solo resultados positivos de informes, laboratorio, estudios complementarios..."
+                    value={formData.labResults}
+                    onChange={e => setFormData({...formData, labResults: e.target.value})}
+                    className="min-h-[100px]"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Motivo de Consulta *</label>
-                <Textarea 
-                  required
-                  placeholder="Describe brevemente el motivo de la consulta..."
-                  value={formData.reason}
-                  onChange={e => setFormData({...formData, reason: e.target.value})}
-                  className="min-h-[80px]"
-                />
-              </div>
+              {/* SECCIÓN: CONSULTA ACTUAL */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  <h3 className="text-lg font-semibold text-primary">Consulta Actual</h3>
+                </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Diagnóstico</label>
-                <Textarea 
-                  placeholder="Diagnóstico o impresión clínica..."
-                  value={formData.diagnosis}
-                  onChange={e => setFormData({...formData, diagnosis: e.target.value})}
-                  className="min-h-[80px]"
-                />
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Categoría</label>
+                    <select 
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                      value={formData.category}
+                      onChange={e => setFormData({...formData, category: e.target.value})}
+                    >
+                      <option>General</option>
+                      <option>Pediátrico</option>
+                      <option>Crónico</option>
+                      <option>Emergencia</option>
+                      <option>Cirugía</option>
+                      <option>Obstétrico/Ginecológico</option>
+                      <option>Salud mental</option>
+                      <option>Geriátrico</option>
+                      <option>Oncológico</option>
+                      <option>Infectológico/Transmisible</option>
+                    </select>
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Tratamiento</label>
-                <Textarea 
-                  placeholder="Tratamiento indicado..."
-                  value={formData.treatment}
-                  onChange={e => setFormData({...formData, treatment: e.target.value})}
-                  className="min-h-[80px]"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Fecha de Consulta</label>
+                    <Input 
+                      type="date" 
+                      value={formData.consultationDate}
+                      onChange={e => setFormData({...formData, consultationDate: e.target.value})}
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Seguimiento</label>
-                <Textarea 
-                  placeholder="Se recomienda anotar la fecha de cada consulta futura..."
-                  value={formData.observations}
-                  onChange={e => setFormData({...formData, observations: e.target.value})}
-                  className="min-h-[60px]"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Hora</label>
+                    <Input 
+                      type="time" 
+                      value={formData.consultationTime}
+                      onChange={e => setFormData({...formData, consultationTime: e.target.value})}
+                    />
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <BookOpen className="w-4 h-4" />
-                  Lecciones Aprendidas
-                </label>
-                <Textarea 
-                  placeholder="Reflexiones o aprendizajes del caso..."
-                  value={formData.lessonsLearned}
-                  onChange={e => setFormData({...formData, lessonsLearned: e.target.value})}
-                  className="min-h-[60px]"
-                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Duración (minutos)</label>
+                    <Input 
+                      type="number" 
+                      min="1"
+                      value={formData.durationMinutes}
+                      onChange={e => setFormData({...formData, durationMinutes: Number(e.target.value)})}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Fecha de Seguimiento</label>
+                    <Input 
+                      type="date" 
+                      value={formData.followUpDate}
+                      onChange={e => setFormData({...formData, followUpDate: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Motivo de Consulta *</label>
+                  <Textarea 
+                    required
+                    placeholder="Describe brevemente el motivo de la consulta..."
+                    value={formData.reason}
+                    onChange={e => setFormData({...formData, reason: e.target.value})}
+                    className="min-h-[80px]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Diagnóstico</label>
+                  <Textarea 
+                    placeholder="Diagnóstico o impresión clínica..."
+                    value={formData.diagnosis}
+                    onChange={e => setFormData({...formData, diagnosis: e.target.value})}
+                    className="min-h-[80px]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Tratamiento</label>
+                  <Textarea 
+                    placeholder="Tratamiento indicado..."
+                    value={formData.treatment}
+                    onChange={e => setFormData({...formData, treatment: e.target.value})}
+                    className="min-h-[80px]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Seguimiento</label>
+                  <Textarea 
+                    placeholder="Se recomienda anotar la fecha de cada consulta futura..."
+                    value={formData.observations}
+                    onChange={e => setFormData({...formData, observations: e.target.value})}
+                    className="min-h-[60px]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Lecciones Aprendidas</label>
+                  <Textarea 
+                    placeholder="Reflexiones o aprendizajes del caso..."
+                    value={formData.lessonsLearned}
+                    onChange={e => setFormData({...formData, lessonsLearned: e.target.value})}
+                    className="min-h-[60px]"
+                  />
+                </div>
               </div>
 
               <Button 
@@ -431,10 +555,11 @@ export function Patients({ user }: PatientsProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Edad</TableHead>
                   <TableHead>Fecha</TableHead>
                   <TableHead>Categoría</TableHead>
                   <TableHead>Motivo</TableHead>
-                  <TableHead>Diagnóstico</TableHead>
                   <TableHead>Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -444,15 +569,18 @@ export function Patients({ user }: PatientsProps) {
                     <TableCell className="font-medium">
                       {patient.anonymousId}
                     </TableCell>
+                    <TableCell className="font-medium">
+                      {patient.patientName || '-'}
+                    </TableCell>
+                    <TableCell>
+                      {patient.patientAge || '-'}
+                    </TableCell>
                     <TableCell>{patient.consultationDate}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{patient.category}</Badge>
                     </TableCell>
                     <TableCell className="max-w-xs truncate">
                       {patient.reason}
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {patient.diagnosis || '-'}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
